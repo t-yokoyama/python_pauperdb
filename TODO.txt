@@ -1,0 +1,18 @@
+
+ - mtgtop8 scraper
+   - logic for converting date range to event list URLs
+   - logic for converting event list URL to deck list URLs (based on # participants)
+   - logic for converting deck list URL to deck text file
+     - save event/deck metadata into filename (date, event name, # participants, user, place finish)
+     - short circuit if deck text file exists locally
+   - implement a configurable URL request throttle
+
+ - hareruya scraper
+
+ - archetype schema file
+   - json? xml? yaml?
+
+ - database loader
+   - logic for loading local deck text files into database table
+   - logic for categorizing a deck into an archetype
+
