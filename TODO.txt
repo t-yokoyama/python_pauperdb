@@ -1,6 +1,5 @@
 
  - mtgtop8 scraper
-   - logic for converting date range to event list URLs
    - logic for converting event list URL to deck list URLs (based on # participants)
    - logic for converting deck list URL to deck text file
      - save event/deck metadata into filename (date, event name, # participants, user, place finish)
