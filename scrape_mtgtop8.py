@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import requests
 import sys
 import time
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
 
 # throttle HTTP requests so we don't get blacklisted
 HTTP_REQUEST_DELAY_SECS= 2
@@ -16,6 +18,12 @@ class Event:
     url: str
     date: str
     name: str
+
+@dataclass
+class Deck:
+    url: str
+    player: str
+    finish: str
 
 
 def convertDateStr(date):
@@ -45,7 +53,7 @@ def getHtml(url):
 def getEventsFromHtml(html, startDate, endDate):
 
     earliestDate = None
-    eventList = []
+    events = []
 
     try:
         eventTable = html.find_all("table", class_="Stable")[1]
@@ -91,15 +99,15 @@ def getEventsFromHtml(html, startDate, endDate):
         eventUrl = f"https://www.mtgtop8.com/{eventUrlHref}"
 
         event = Event(eventUrl, eventDate, eventName)
-        eventList.append(event)
+        events.append(event)
         print(f"Found event: {event}")
 
-    return (eventList, earliestDate)
+    return (events, earliestDate)
 
 
 def getEvents(startDate, endDate):
 
-    eventList = []
+    events = []
 
     # TODO break up the search into 'top' pages by year
 
@@ -108,8 +116,8 @@ def getEvents(startDate, endDate):
         pageUrl = f"https://www.mtgtop8.com/format?f=PAU&meta=127&cp={page}"
         html = getHtml(pageUrl)
         if html is not None:
-            (urls, earliestDate) = getEventsFromHtml(html, startDate, endDate)
-            eventList.extend(urls)
+            (results, earliestDate) = getEventsFromHtml(html, startDate, endDate)
+            events.extend(results)
         if html is None or int(earliestDate) < int(startDate):
             # subsequent pages go back in time, so if the earliest found event
             # was before our start boundary, there will be no more hits
@@ -117,7 +125,7 @@ def getEvents(startDate, endDate):
         else:
             page = page + 1
 
-    return eventList
+    return events
 
 
 def eventToDirPath(event):
@@ -130,21 +138,91 @@ def eventToDirPath(event):
     return os.path.join(year, month, day, name)
 
 
+def getDeckFromDeckDiv(deckDiv, numPlayers):
+
+    try:
+        deckHref = deckDiv.find("div", attrs={"style":"width:100%;padding-left:4px;margin-bottom:4px;"}).find("a").get("href")
+        deckUrl = f"https://www.mtgtop8.com/event{deckHref}"
+    except:
+        print("ERROR: Deck list URL not found in event deck row!", file=sys.stderr)
+        return None
+
+    try:
+        deckPlayer = deckDiv.find("div", "G11").text
+    except:
+        print("ERROR: Player name not found in event deck row!", file=sys.stderr)
+        return None
+
+    try:
+        deckRank = deckDiv.find("div", "S14").text
+    except:
+        print("ERROR: Deck rank not found in event deck row!", file=sys.stderr)
+        return None
+
+    deckFinish = "n/a" if numPlayers == None else f"{deckRank}/{numPlayers}"
+
+    deck = Deck(deckUrl, deckPlayer, deckFinish)
+    print(f"Found deck: {deck}")
+    return deck
+
+
+def getDecksFromHtml(html):
+
+    decks = []
+
+    # example eventDataDiv:
+    # <div style="margin-bottom:5px;">40 players - 06/08/24</div>
+    eventDataDiv = html.find("div", attrs={"style":"margin-bottom:5px;"})
+    if not eventDataDiv:
+        print(f"ERROR: Event metadata div not found!", file=sys.stderr)
+        return []
+
+    # use None as a flag for events without positional rankings (e.g. mtgo leagues)
+    playersRegex = re.search(r"(\d+) players", eventDataDiv.text)
+    numPlayers = None if playersRegex is None else playersRegex.group(1)
+
+    leftNavDiv = html.find("div", attrs={"style":"margin:0px 4px 0px 4px;"})
+    if not leftNavDiv:
+        print(f"ERROR: Left div not found!", file=sys.stderr)
+        return []
+
+    firstDeckDiv = leftNavDiv.find("div", class_="chosen_tr")
+    if not firstDeckDiv:
+        print(f"ERROR: First deck div not found!", file=sys.stderr)
+        return []
+
+    deck = getDeckFromDeckDiv(firstDeckDiv, numPlayers)
+    if deck:
+        decks.append(deck)
+
+    for deckDiv in leftNavDiv.find_all("div", class_="hover_tr"):
+        deck = getDeckFromDeckDiv(deckDiv, numPlayers)
+        if deck:
+            decks.append(deck)
+
+    return decks
+
+
 def downloadEvent(event):
 
     eventDirPath = eventToDirPath(event)
-    print (eventDirPath)
-
     # TODO short circuit if event dir path exists
-    # TODO eventUrl => deckListUrls
+
+    html = getHtml(event.url)
+    if html is None:
+        print(f"ERROR: Failed to retrieve event {event.url}", file=sys.stderr)
+        return
+
+    decks = getDecksFromHtml(html)
+
     # TODO deckListUrl => dowload deckList to /tmp
     # TODO create event dir path
     # TODO copy deckLists from /tmp to dir path
 
 
 def downloadResults(startDate, endDate):
-    eventList = getEvents(startDate, endDate)
-    for event in eventList:
+    events = getEvents(startDate, endDate)
+    for event in events:
         downloadEvent(event)
 
 

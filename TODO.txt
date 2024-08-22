@@ -1,12 +1,12 @@
 
  - mtgtop8 scraper
-   - logic for converting event list URL to deck list URLs (based on # participants)
    - logic for converting deck list URL to deck text file
      - save event/deck metadata into filename (date, event name, # participants, user, place finish)
      - short circuit if deck text file exists locally
-   - implement a configurable URL request throttle
 
  - hareruya scraper
+
+ - mtggoldfish scraper (because mtgtop8 only does top 8 of mtgo leagues)
 
  - archetype schema file
    - json? xml? yaml?
