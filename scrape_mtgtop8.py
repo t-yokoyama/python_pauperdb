@@ -203,34 +203,77 @@ def getDecksFromHtml(html):
     return decks
 
 
-def downloadEvent(event):
-
-    eventDirPath = eventToDirPath(event)
-    # TODO short circuit if event dir path exists
+def getDecksFromEvent(event):
 
     html = getHtml(event.url)
     if html is None:
         print(f"ERROR: Failed to retrieve event {event.url}", file=sys.stderr)
-        return
+        return []
 
     decks = getDecksFromHtml(html)
+    return decks
 
-    # TODO deckListUrl => dowload deckList to /tmp
-    # TODO create event dir path
-    # TODO copy deckLists from /tmp to dir path
+
+def getDeckTextFromHtml(html):
+
+    deckListDiv = html.find("div", attrs={"style":"display:flex;align-content:stretch;"})
+    if not deckListDiv:
+        print("ERROR: Deck list div not found!", file=sys.stderr)
+        return None
+
+    mb = []
+    sb = []
+    for cardGroupDiv in deckListDiv.find_all("div", attrs={"style":"margin:3px;flex:1;"}):
+        labelDiv = cardGroupDiv.find("div", class_="O14")
+        for cardDiv in cardGroupDiv.find_all("div", class_="deck_line"):
+            line = cardDiv.text.strip()
+            if labelDiv.text == "SIDEBOARD":
+                sb.append(line)
+            else:
+                mb.append(line)
+
+    deckText = "\n".join( [ "\n".join(mb), "SIDEBOARD", "\n".join(sb) ] )
+    return deckText
+
+
+def getDeckText(deck):
+
+    html = getHtml(deck.url)
+    if html is None:
+        print(f"ERROR: Failed to retrieve deck {event.url}", file=sys.stderr)
+        return None
+
+    deckText = getDeckTextFromHtml(html)
+    return deckText
 
 
 def downloadResults(startDate, endDate):
+
     events = getEvents(startDate, endDate)
     for event in events:
-        downloadEvent(event)
+
+        eventDirPath = eventToDirPath(event)
+        # TODO short circuit if event dir path exists
+
+        decks = getDecksFromEvent(event)
+        for deck in decks:
+
+            deckText = getDeckText(deck)
+            if deckText:
+
+                print(deckText)
+                print(" ")
+
+    # TODO deckListUrl => transcribe deckList to /tmp
+    # TODO create event dir path
+    # TODO copy deckLists from /tmp to dir path
 
 
 def main():
 
     # TODO argparse stuff to get optional start/end dates
 
-    startDate = (datetime.today() - timedelta(days=7)).strftime("%Y%m%d")
+    startDate = (datetime.today() - timedelta(days=2)).strftime("%Y%m%d")
     endDate = datetime.today().strftime("%Y%m%d")
 
     downloadResults(startDate, endDate)
