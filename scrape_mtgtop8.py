@@ -3,6 +3,7 @@
 import os
 import re
 import requests
+import shutil
 import sys
 import time
 from bs4 import BeautifulSoup
@@ -128,16 +129,6 @@ def getEvents(startDate, endDate):
     return events
 
 
-def eventToDirPath(event):
-
-    name = event.name.strip().replace(' ', '_').replace('/', '_').replace("'", '').replace('"', '')
-    year = event.date[0:4]
-    month = event.date[4:6]
-    day = event.date[6:8]
-
-    return os.path.join(year, month, day, name)
-
-
 def getDeckFromDeckDiv(deckDiv, numPlayers):
 
     try:
@@ -159,7 +150,7 @@ def getDeckFromDeckDiv(deckDiv, numPlayers):
         print("ERROR: Deck rank not found in event deck row!", file=sys.stderr)
         return None
 
-    deckFinish = "n/a" if numPlayers == None else f"{deckRank}/{numPlayers}"
+    deckFinish = "-" if numPlayers == None else f"{deckRank}/{numPlayers}"
 
     deck = Deck(deckUrl, deckPlayer, deckFinish)
     print(f"Found deck: {deck}")
@@ -227,7 +218,7 @@ def getDeckTextFromHtml(html):
         labelDiv = cardGroupDiv.find("div", class_="O14")
         for cardDiv in cardGroupDiv.find_all("div", class_="deck_line"):
             line = cardDiv.text.strip()
-            if labelDiv.text == "SIDEBOARD":
+            if labelDiv and labelDiv.text == "SIDEBOARD":
                 sb.append(line)
             else:
                 mb.append(line)
@@ -247,33 +238,67 @@ def getDeckText(deck):
     return deckText
 
 
+def eventToDirPath(event):
+    name = event.name.strip().replace(' ', '_').replace('/', '_').replace("'", '').replace('"', '')
+    year = event.date[0:4]
+    month = event.date[4:6]
+    day = event.date[6:8]
+    return os.path.join("data", year, month, day, name)
+
+
+def eventToTmpPath(event):
+    name = event.name.strip().replace(' ', '_').replace('/', '_').replace("'", '').replace('"', '')
+    return os.path.join("/", "tmp", name)
+
+
+def deckToFileName(deckIndex, deck):
+    finish = deck.finish.replace('/', ':')
+    player = deck.player.replace(' ', '-').replace('/', '-').replace("'", '').replace('"', '')
+    return f"{deckIndex}_{finish}_{player}"
+
+
 def downloadResults(startDate, endDate):
 
     events = getEvents(startDate, endDate)
     for event in events:
 
         eventDirPath = eventToDirPath(event)
-        # TODO short circuit if event dir path exists
+        if os.path.exists(eventDirPath):
+            print(f"Already downloaded {eventtDirPath}, skipping...")
+            continue
+
+        tmpDirPath = eventToTmpPath(event)
+        if os.path.exists(tmpDirPath):
+            shutil.rmtree(tmpDirPath)
+        os.makedirs(tmpDirPath)
 
         decks = getDecksFromEvent(event)
-        for deck in decks:
+        for deckIndex, deck in enumerate(decks):
 
             deckText = getDeckText(deck)
             if deckText:
 
-                print(deckText)
-                print(" ")
+                deckPath = os.path.join(tmpDirPath, deckToFileName(deckIndex, deck))
+                with open(deckPath, 'w') as f:
+                    f.write(f"// URL: {deck.url}\n")
+                    f.write(f"// PLAYER: {deck.player}\n")
+                    f.write(f"// FINISH: {deck.finish}\n")
+                    f.write(deckText)
+                    print(f"Saved {deckPath}")
 
-    # TODO deckListUrl => transcribe deckList to /tmp
-    # TODO create event dir path
-    # TODO copy deckLists from /tmp to dir path
+        # create the entire event's deck dir in /tmp and move it to its final
+        # canonical path as the last step, so we can be confident that if it
+        # ever exists at the latter path, its contents are complete
+        if len(os.listdir(tmpDirPath)) > 0:
+            shutil.move(tmpDirPath, eventDirPath)
+            print(f"Saved {eventDirPath}")
 
 
 def main():
 
     # TODO argparse stuff to get optional start/end dates
 
-    startDate = (datetime.today() - timedelta(days=2)).strftime("%Y%m%d")
+    startDate = (datetime.today() - timedelta(days=3)).strftime("%Y%m%d")
     endDate = datetime.today().strftime("%Y%m%d")
 
     downloadResults(startDate, endDate)

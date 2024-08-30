@@ -1,8 +1,7 @@
 
  - mtgtop8 scraper
-   - logic for converting deck list URL to deck text file
-     - save event/deck metadata into filename (date, event name, # participants, user, place finish)
-     - short circuit if deck text file exists locally
+   - argparser
+   - year-specific pages
 
  - hareruya scraper
 
